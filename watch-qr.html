@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Watch QR — single page</title>
+  <meta name="color-scheme" content="dark light" />
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #121823;
+      --ink: #e7eef8;
+      --ink-weak: #9aa9bb;
+      --primary: #4da3ff;
+      --primary-weak: rgba(77, 163, 255, .25);
+      --ok: #46d07f;
+      --warn: #ffd166;
+      --err: #ff6b6b;
+      --border: rgba(255, 255, 255, .08);
+      --border-weak: rgba(255, 255, 255, .06);
+      --surface: #0e131c;
+      --link: #9bd1ff;
+      --focus: 0 0 0 3px rgba(77, 163, 255, .45);
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f6f8fb;
+        --panel: #ffffff;
+        --ink: #0b0f14;
+        --ink-weak: #556371;
+        --border: rgba(0, 0, 0, .08);
+        --border-weak: rgba(0, 0, 0, .06);
+        --surface: #f0f4f9;
+        --link: #0b78f5;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      margin: 0;
+      font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    .wrap {
+      padding: 14px;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    header h1 {
+      font-size: 18px;
+      margin: 0 0 10px;
+      letter-spacing: .2px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .grow {
+      flex: 1 1 auto;
+    }
+
+    button,
+    select {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--ink);
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    button.primary {
+      background: var(--primary);
+      border-color: transparent;
+      color: #fff;
+      box-shadow: 0 6px 18px var(--primary-weak);
+    }
+
+    button.secondary {
+      background: #233142;
+      color: #fff;
+      border-color: transparent;
+    }
+
+    @media (prefers-color-scheme: light) {
+      button.secondary {
+        background: #e9eef5;
+        color: #0b0f14;
+      }
+    }
+
+    button[disabled] {
+      opacity: .6;
+      cursor: not-allowed;
+    }
+
+    button:focus-visible,
+    select:focus-visible,
+    input[type="checkbox"]:focus-visible {
+      outline: none;
+      box-shadow: var(--focus);
+    }
+
+    label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--ink-weak);
+      user-select: none;
+    }
+
+    input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+    }
+
+    .video {
+      background: #0a0d12;
+      border: 1px solid var(--border-weak);
+      border-radius: 10px;
+      overflow: hidden;
+      display: grid;
+      place-items: center;
+      aspect-ratio: 16 / 10;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+
+    .status {
+      font-size: 12px;
+      color: var(--ink-weak);
+      margin-top: 6px;
+    }
+
+    .status.ok {
+      color: var(--ok);
+    }
+
+    .status.warn {
+      color: var(--warn);
+    }
+
+    .status.err {
+      color: var(--err);
+    }
+
+    .result {
+      margin-top: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border-weak);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .result .row {
+      margin: 0;
+    }
+
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    a {
+      color: var(--link);
+    }
+
+    .spacer {
+      flex: 1 1 auto;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: var(--ink-weak);
+    }
+
+    .kbd {
+      font: 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: rgba(255, 255, 255, .08);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px 6px;
+      color: var(--ink);
+    }
+
+    .badge {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--ink-weak);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Watch QR</h1>
+    </header>
+
+    <section class="panel" aria-labelledby="controlsTitle">
+      <div class="row" id="controlsTitle" style="margin-bottom:2px;">
+        <button id="startBtn" class="primary" aria-controls="videoEl status">Start</button>
+        <button id="stopBtn" class="secondary" disabled>Stop</button>
+        <span class="spacer"></span>
+        <label title="Automatically open URLs when detected">
+          <input type="checkbox" id="autoOpen" checked> Auto open
+        </label>
+        <label title="Open URL in this tab instead of a new one">
+          <input type="checkbox" id="openHere"> Open in this tab
+        </label>
+      </div>
+
+      <div class="row">
+        <label for="source">Source</label>
+        <select id="source" aria-label="Video source">
+          <option value="screen" selected>Screen / Window / Tab</option>
+          <option value="camera">Camera (rear if available)</option>
+        </select>
+        <span class="badge" id="supportBadge" title="Feature support">Checking…</span>
+        <span class="spacer"></span>
+        <span class="hint">
+          Shortcuts:
+          <span class="kbd">S</span> start,
+          <span class="kbd">X</span> stop,
+          <span class="kbd">Esc</span> stop
+        </span>
+      </div>
+
+      <div class="video" aria-live="off" aria-label="Video input">
+        <video id="videoEl" playsinline autoplay muted></video>
+      </div>
+
+      <p id="status" class="status" role="status" aria-live="polite">
+        Ready. Click <strong>Start</strong> and choose a tab/window with a QR code.
+      </p>
+
+      <div id="results" class="result hidden" aria-live="polite">
+        <div class="row" style="justify-content:space-between">
+          <div>
+            <strong>Last result:</strong>
+            <span id="resultType" class="badge">—</span>
+          </div>
+          <div class="row" style="gap:6px">
+            <button id="copyBtn" title="Copy value to clipboard">Copy</button>
+            <button id="openBtn" title="Open URL" class="hidden">Open</button>
+          </div>
+        </div>
+        <div class="row" style="margin-top:6px">
+          <div id="resultValue" class="mono"></div>
+        </div>
+      </div>
+
+      <p class="hint" style="margin-top:10px">
+        Tip: for automatic opening in a separate window, keep “Auto open” on and leave “Open in this tab” off.
+        A helper window will be prepared when you start (this bypasses popup blockers).
+      </p>
+    </section>
+  </div>
+
+  <script>
+    // ---- Elements
+    const videoEl = document.getElementById('videoEl');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const autoOpen = document.getElementById('autoOpen');
+    const openHere = document.getElementById('openHere');
+    const resultsEl = document.getElementById('results');
+    const resultTypeEl = document.getElementById('resultType');
+    const resultValueEl = document.getElementById('resultValue');
+    const copyBtn = document.getElementById('copyBtn');
+    const openBtn = document.getElementById('openBtn');
+    const statusEl = document.getElementById('status');
+    const sourceSel = document.getElementById('source');
+    const supportBadge = document.getElementById('supportBadge');
+
+    // ---- State
+    let stream = null;
+    let detector = null;
+    let running = false;
+    let vfcId = null;
+    let lastValue = null;
+    let targetWin = null; // prepared window for auto-open
+    const COOLDOWN_MS = 4000;
+    const seenTs = new Map();
+    let beepCtx = null;
+
+    // ---- Utils
+    const isUrl = (v) => /^https?:\/\/\S+/i.test(v);
+    const setStatus = (text, cls = '') => {
+      statusEl.textContent = text;
+      statusEl.className = 'status ' + cls;
+    };
+    const savePrefs = () => {
+      localStorage.setItem('qr_prefs', JSON.stringify({
+        autoOpen: autoOpen.checked,
+        openHere: openHere.checked,
+        source: sourceSel.value
+      }));
+    };
+    const loadPrefs = () => {
+      try {
+        const raw = localStorage.getItem('qr_prefs');
+        if (!raw) return;
+        const p = JSON.parse(raw);
+        if (typeof p.autoOpen === 'boolean') autoOpen.checked = p.autoOpen;
+        if (typeof p.openHere === 'boolean') openHere.checked = p.openHere;
+        if (typeof p.source === 'string') sourceSel.value = p.source;
+      } catch { }
+    };
+    const ensureBeep = () => {
+      if (!beepCtx) beepCtx = new (window.AudioContext || window.webkitAudioContext)();
+    };
+    const beep = (freq = 880, dur = 0.08) => {
+      try {
+        ensureBeep();
+        const o = beepCtx.createOscillator();
+        const g = beepCtx.createGain();
+        o.connect(g).connect(beepCtx.destination);
+        o.type = 'sine'; o.frequency.value = freq;
+        g.gain.setValueAtTime(0.001, beepCtx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.12, beepCtx.currentTime + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.001, beepCtx.currentTime + dur);
+        o.start(); o.stop(beepCtx.currentTime + dur + 0.02);
+      } catch { }
+    };
+
+    const clearVideoCallbacks = () => {
+      if (vfcId && 'cancelVideoFrameCallback' in HTMLVideoElement.prototype) {
+        try {videoEl.cancelVideoFrameCallback(vfcId);} catch { }
+      }
+      vfcId = null;
+    };
+
+    const stopTracks = () => {
+      if (videoEl.srcObject) {
+        try {videoEl.srcObject.getTracks().forEach(t => t.stop());} catch { }
+        videoEl.srcObject = null;
+      }
+    };
+
+    const safeSetResult = (val) => {
+      resultsEl.classList.remove('hidden');
+      resultValueEl.textContent = ''; // reset
+      openBtn.classList.add('hidden');
+
+      if (isUrl(val)) {
+        resultTypeEl.textContent = 'URL';
+        // Create a safe anchor
+        const a = document.createElement('a');
+        a.href = val;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = val;
+        resultValueEl.appendChild(a);
+        openBtn.classList.remove('hidden');
+        openBtn.onclick = () => window.open(val, '_blank', 'noopener');
+      } else {
+        resultTypeEl.textContent = 'Text';
+        resultValueEl.textContent = val;
+      }
+      copyBtn.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(val);
+          copyBtn.textContent = 'Copied!';
+          setTimeout(() => (copyBtn.textContent = 'Copy'), 900);
+        } catch {
+          copyBtn.textContent = 'Copy failed';
+          setTimeout(() => (copyBtn.textContent = 'Copy'), 900);
+        }
+      };
+    };
+
+    const prepareTargetWindow = () => {
+      if (autoOpen.checked && !openHere.checked) {
+        targetWin = window.open('', 'qr_target');
+        if (targetWin && targetWin.document) {
+          targetWin.document.open();
+          targetWin.document.write(
+            '<!doctype html><title>QR Target</title>' +
+            '<meta name="color-scheme" content="dark light">' +
+            '<body style="font:14px system-ui; padding:14px">' +
+            '<p>Waiting for a QR URL…</p>' +
+            '</body>'
+          );
+          targetWin.document.close();
+        }
+      }
+    };
+
+    const detectSupport = async () => {
+      const hasBD = 'BarcodeDetector' in window;
+      const hasRVFC = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+      let formats = [];
+      if (hasBD) {
+        try {
+          const supported = await BarcodeDetector.getSupportedFormats();
+          formats = supported || [];
+        } catch { }
+      }
+      const ok = hasBD && formats.includes('qr_code');
+      supportBadge.textContent = ok ? 'QR supported' : (hasBD ? 'QR format unknown' : 'No BarcodeDetector');
+      supportBadge.title = `BarcodeDetector: ${hasBD ? 'yes' : 'no'} • requestVideoFrameCallback: ${hasRVFC ? 'yes' : 'no'}`;
+      supportBadge.style.color = ok ? 'var(--ok)' : 'var(--warn)';
+      return ok;
+    };
+
+    // ---- Core flow
+    async function start() {
+      if (running) return;
+      savePrefs();
+
+      // Detector
+      if (!('BarcodeDetector' in window)) {
+        setStatus('BarcodeDetector is not available. Please update your browser (Chrome/Edge).', 'warn');
+      } else {
+        try {
+          detector = new BarcodeDetector({formats: ['qr_code']});
+        } catch (e) {
+          detector = null;
+          console.error(e);
+          setStatus('Failed to initialize BarcodeDetector.', 'err');
+        }
+      }
+
+      // Stream
+      try {
+        if (sourceSel.value === 'camera') {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {facingMode: {ideal: 'environment'}},
+            audio: false
+          });
+        } else {
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: {frameRate: 30},
+            audio: false
+          });
+        }
+
+        const [track] = stream.getVideoTracks();
+        if (track) track.addEventListener('ended', () => {
+          stop();
+          setStatus('Capture stopped.', '');
+        });
+
+        videoEl.srcObject = stream;
+        await videoEl.play();
+
+        // Prepare helper window (user gesture)
+        prepareTargetWindow();
+
+        running = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        setStatus('Scanning… the tab/window with QR may be in the background.', 'ok');
+
+        const tick = () => {
+          if (!running) return;
+          detectOnce();
+          if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+            vfcId = videoEl.requestVideoFrameCallback(() => tick());
+          } else {
+            setTimeout(tick, 200);
+          }
+        };
+        if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+          vfcId = videoEl.requestVideoFrameCallback(() => tick());
+        } else {
+          setTimeout(tick, 200);
+        }
+      } catch (e) {
+        console.error(e);
+        setStatus('Failed to start: ' + (e && e.message ? e.message : e), 'err');
+        stop(); // ensure cleanup if partially started
+      }
+    }
+
+    function stop() {
+      running = false;
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      clearVideoCallbacks();
+      stopTracks();
+      setStatus('Stopped.', '');
+    }
+
+    async function detectOnce() {
+      if (!detector || !videoEl || videoEl.readyState < 2) return;
+      try {
+        const codes = await detector.detect(videoEl);
+        if (!codes || !codes.length) return;
+
+        const val = (codes[0].rawValue || '').trim();
+        if (!val) return;
+
+        if (val !== lastValue) {
+          lastValue = val;
+          safeSetResult(val);
+          setStatus('QR detected!', 'ok');
+          beep();
+        }
+
+        const now = performance.now();
+        const lastTs = seenTs.get(val) || 0;
+        if (now - lastTs < COOLDOWN_MS) return;
+        seenTs.set(val, now);
+
+        if (isUrl(val) && autoOpen.checked) {
+          if (openHere.checked) {
+            location.replace(val);
+          } else if (targetWin && !targetWin.closed) {
+            targetWin.location.replace(val);
+            try {targetWin.focus();} catch { }
+          } else {
+            window.open(val, '_blank', 'noopener');
+          }
+        }
+      } catch {
+        // ignore per-frame detector errors
+      }
+    }
+
+    // ---- Events
+    startBtn.addEventListener('click', start);
+    stopBtn.addEventListener('click', stop);
+    autoOpen.addEventListener('change', savePrefs);
+    openHere.addEventListener('change', savePrefs);
+    sourceSel.addEventListener('change', savePrefs);
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 's' || e.key === 'S') start();
+      if (e.key === 'x' || e.key === 'X' || e.key === 'Escape') stop();
+    });
+
+    // Init
+    (async function init() {
+      loadPrefs();
+      await detectSupport();
+      setStatus('Ready. Click Start and choose a tab/window with a QR code.');
+    })();
+  </script>
+</body>
+
+</html>
