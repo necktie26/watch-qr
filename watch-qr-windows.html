@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Watch QR — single page (Windows-friendly)</title>
+  <title>Watch QR — single page (Fixed)</title>
   <meta name="color-scheme" content="dark light" />
   <style>
     :root {
@@ -285,11 +285,14 @@
       </div>
 
       <p class="hint" style="margin-top:10px">
-        Tip: for automatic opening in a separate window, keep “Auto open” on and leave “Open in this tab” off.
+        Tip: for automatic opening in a separate window, keep "Auto open" on and leave "Open in this tab" off.
         A helper window will be prepared when you start (this bypasses popup blockers).
       </p>
     </section>
   </div>
+
+  <!-- Load jsQR library directly -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 
   <script>
     // ---- Elements
@@ -320,10 +323,13 @@
 
     // ---- Utils
     const isUrl = (v) => /^https?:\/\/\S+/i.test(v);
+
     const setStatus = (text, cls = '') => {
       statusEl.textContent = text;
       statusEl.className = 'status ' + cls;
+      console.log('Status:', text);
     };
+
     const savePrefs = () => {
       localStorage.setItem('qr_prefs', JSON.stringify({
         autoOpen: autoOpen.checked,
@@ -331,6 +337,7 @@
         source: sourceSel.value
       }));
     };
+
     const loadPrefs = () => {
       try {
         const raw = localStorage.getItem('qr_prefs');
@@ -339,42 +346,69 @@
         if (typeof p.autoOpen === 'boolean') autoOpen.checked = p.autoOpen;
         if (typeof p.openHere === 'boolean') openHere.checked = p.openHere;
         if (typeof p.source === 'string') sourceSel.value = p.source;
-      } catch { }
+      } catch (e) {
+        console.error('Failed to load preferences:', e);
+      }
     };
-    const ensureBeep = () => {if (!beepCtx) beepCtx = new (window.AudioContext || window.webkitAudioContext)();};
+
+    const ensureBeep = () => {
+      if (!beepCtx) {
+        beepCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    };
+
     const beep = (freq = 880, dur = 0.08) => {
       try {
         ensureBeep();
         const o = beepCtx.createOscillator();
         const g = beepCtx.createGain();
         o.connect(g).connect(beepCtx.destination);
-        o.type = 'sine'; o.frequency.value = freq;
+        o.type = 'sine';
+        o.frequency.value = freq;
         g.gain.setValueAtTime(0.001, beepCtx.currentTime);
         g.gain.exponentialRampToValueAtTime(0.12, beepCtx.currentTime + 0.01);
         g.gain.exponentialRampToValueAtTime(0.001, beepCtx.currentTime + dur);
-        o.start(); o.stop(beepCtx.currentTime + dur + 0.02);
-      } catch { }
+        o.start();
+        o.stop(beepCtx.currentTime + dur + 0.02);
+      } catch (e) {
+        console.log('Beep failed:', e);
+      }
     };
+
     const clearVideoCallbacks = () => {
       if (vfcId && 'cancelVideoFrameCallback' in HTMLVideoElement.prototype) {
-        try {videoEl.cancelVideoFrameCallback(vfcId);} catch { }
+        try {
+          videoEl.cancelVideoFrameCallback(vfcId);
+        } catch (e) {
+          console.error('Failed to cancel video callback:', e);
+        }
       }
       vfcId = null;
     };
+
     const stopTracks = () => {
       if (videoEl.srcObject) {
-        try {videoEl.srcObject.getTracks().forEach(t => t.stop());} catch { }
+        try {
+          videoEl.srcObject.getTracks().forEach(t => t.stop());
+        } catch (e) {
+          console.error('Failed to stop tracks:', e);
+        }
         videoEl.srcObject = null;
       }
     };
+
     const safeSetResult = (val) => {
       resultsEl.classList.remove('hidden');
       resultValueEl.textContent = ''; // reset
       openBtn.classList.add('hidden');
+
       if (isUrl(val)) {
         resultTypeEl.textContent = 'URL';
         const a = document.createElement('a');
-        a.href = val; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = val;
+        a.href = val;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = val;
         resultValueEl.appendChild(a);
         openBtn.classList.remove('hidden');
         openBtn.onclick = () => window.open(val, '_blank', 'noopener');
@@ -382,17 +416,20 @@
         resultTypeEl.textContent = 'Text';
         resultValueEl.textContent = val;
       }
+
       copyBtn.onclick = async () => {
         try {
           await navigator.clipboard.writeText(val);
           copyBtn.textContent = 'Copied!';
           setTimeout(() => (copyBtn.textContent = 'Copy'), 900);
-        } catch {
+        } catch (e) {
+          console.error('Copy failed:', e);
           copyBtn.textContent = 'Copy failed';
           setTimeout(() => (copyBtn.textContent = 'Copy'), 900);
         }
       };
     };
+
     const prepareTargetWindow = () => {
       if (autoOpen.checked && !openHere.checked) {
         targetWin = window.open('', 'qr_target');
@@ -412,39 +449,61 @@
 
     // ---- Detector loader (native or polyfill)
     async function getDetector() {
+      console.log('Initializing detector...');
+
       // Prefer native if available and supports QR
       if ('BarcodeDetector' in window) {
         try {
           const fmts = await window.BarcodeDetector.getSupportedFormats();
+          console.log('Native BarcodeDetector formats:', fmts);
           if (Array.isArray(fmts) && fmts.includes('qr_code')) {
+            console.log('Using native BarcodeDetector');
             return new window.BarcodeDetector({formats: ['qr_code']});
           }
-        } catch { }
-        // even если конструктор есть, но без нужного формата — идём в полифилл
+        } catch (e) {
+          console.log('Native BarcodeDetector failed:', e);
+        }
       }
-      // Polyfill via jsQR (QR only)
-      const {default: jsQR} = await import('https://esm.sh/jsqr@1.4.0');
+
+      // Polyfill via jsQR
+      console.log('Using jsQR polyfill');
+
+      // Check if jsQR is loaded
+      if (typeof jsQR === 'undefined') {
+        throw new Error('jsQR library not loaded. Please ensure you have internet connection.');
+      }
+
       class JsQRDetector {
         constructor() {
           this.canvas = document.createElement('canvas');
           this.ctx = this.canvas.getContext('2d', {willReadFrequently: true});
         }
+
         async detect(video) {
-          const w = video.videoWidth | 0, h = video.videoHeight | 0;
+          const w = video.videoWidth | 0;
+          const h = video.videoHeight | 0;
           if (!w || !h) return [];
-          this.canvas.width = w; this.canvas.height = h;
+
+          this.canvas.width = w;
+          this.canvas.height = h;
           this.ctx.drawImage(video, 0, 0, w, h);
           const img = this.ctx.getImageData(0, 0, w, h);
-          // Первым делом — без инверсии (быстрее, меньше ложных)
+
+          // First try without inversion (faster)
           let res = jsQR(img.data, w, h, {inversionAttempts: 'dontInvert'});
-          // Если нет — пробуем "attemptBoth" (чуть тяжелее)
-          if (!res) res = jsQR(img.data, w, h, {inversionAttempts: 'attemptBoth'});
+
+          // If not found, try with inversion
+          if (!res) {
+            res = jsQR(img.data, w, h, {inversionAttempts: 'attemptBoth'});
+          }
+
           if (res && res.data) {
             return [{rawValue: res.data, format: 'qr_code'}];
           }
           return [];
         }
       }
+
       return new JsQRDetector();
     }
 
@@ -452,9 +511,14 @@
       const hasBD = 'BarcodeDetector' in window;
       let formats = [];
       if (hasBD) {
-        try {formats = await BarcodeDetector.getSupportedFormats();} catch { }
+        try {
+          formats = await BarcodeDetector.getSupportedFormats();
+        } catch (e) {
+          console.error('Failed to get supported formats:', e);
+        }
       }
       const nativeQR = hasBD && formats.includes('qr_code');
+
       if (nativeQR) {
         supportBadge.textContent = 'QR supported (native)';
         supportBadge.title = `BarcodeDetector: yes • QR: yes`;
@@ -469,35 +533,53 @@
 
     // ---- Core flow
     async function start() {
-      if (running) return;
+      if (running) {
+        console.log('Already running');
+        return;
+      }
+
       savePrefs();
+      console.log('Starting QR scanner...');
 
       try {
         detector = await getDetector();
+        console.log('Detector initialized successfully');
       } catch (e) {
-        console.error(e);
-        setStatus('Failed to initialize QR detector.', 'err');
+        console.error('Failed to initialize detector:', e);
+        setStatus('Failed to initialize QR detector: ' + e.message, 'err');
         return;
       }
 
       // Stream
       try {
         if (sourceSel.value === 'camera') {
+          console.log('Requesting camera access...');
           stream = await navigator.mediaDevices.getUserMedia({
             video: {facingMode: {ideal: 'environment'}},
             audio: false
           });
         } else {
+          console.log('Requesting screen capture...');
           stream = await navigator.mediaDevices.getDisplayMedia({
             video: {frameRate: 30},
             audio: false
           });
         }
+
+        console.log('Stream obtained successfully');
+
         const [track] = stream.getVideoTracks();
-        if (track) track.addEventListener('ended', () => {stop(); setStatus('Capture stopped.', '');});
+        if (track) {
+          track.addEventListener('ended', () => {
+            console.log('Track ended');
+            stop();
+            setStatus('Capture stopped.', '');
+          });
+        }
 
         videoEl.srcObject = stream;
         await videoEl.play();
+        console.log('Video playing');
 
         // Prepare helper window (user gesture)
         prepareTargetWindow();
@@ -516,19 +598,23 @@
             setTimeout(tick, 200);
           }
         };
+
         if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+          console.log('Using requestVideoFrameCallback');
           vfcId = videoEl.requestVideoFrameCallback(() => tick());
         } else {
+          console.log('Using setTimeout fallback');
           setTimeout(tick, 200);
         }
       } catch (e) {
-        console.error(e);
+        console.error('Failed to start capture:', e);
         setStatus('Failed to start: ' + (e && e.message ? e.message : e), 'err');
         stop(); // ensure cleanup if partially started
       }
     }
 
     function stop() {
+      console.log('Stopping scanner...');
       running = false;
       startBtn.disabled = false;
       stopBtn.disabled = true;
@@ -539,6 +625,7 @@
 
     async function detectOnce() {
       if (!detector || !videoEl || videoEl.readyState < 2) return;
+
       try {
         const codes = await detector.detect(videoEl);
         if (!codes || !codes.length) return;
@@ -547,6 +634,7 @@
         if (!val) return;
 
         if (val !== lastValue) {
+          console.log('QR code detected:', val);
           lastValue = val;
           safeSetResult(val);
           setStatus('QR detected!', 'ok');
@@ -559,17 +647,22 @@
         seenTs.set(val, now);
 
         if (isUrl(val) && autoOpen.checked) {
+          console.log('Auto-opening URL:', val);
           if (openHere.checked) {
             location.replace(val);
           } else if (targetWin && !targetWin.closed) {
             targetWin.location.replace(val);
-            try {targetWin.focus();} catch { }
+            try {
+              targetWin.focus();
+            } catch (e) {
+              console.error('Failed to focus target window:', e);
+            }
           } else {
             window.open(val, '_blank', 'noopener');
           }
         }
-      } catch {
-        // ignore per-frame detector errors
+      } catch (e) {
+        // Ignore per-frame detector errors to avoid spam
       }
     }
 
@@ -582,15 +675,43 @@
 
     // Keyboard shortcuts
     window.addEventListener('keydown', (e) => {
-      if (e.key === 's' || e.key === 'S') start();
-      if (e.key === 'x' || e.key === 'X' || e.key === 'Escape') stop();
+      if (e.key === 's' || e.key === 'S') {
+        if (!running) start();
+      }
+      if (e.key === 'x' || e.key === 'X' || e.key === 'Escape') {
+        if (running) stop();
+      }
     });
 
     // Init
     (async function init() {
+      console.log('Initializing app...');
       loadPrefs();
+
+      // Wait a bit for jsQR to load
+      if (typeof jsQR === 'undefined') {
+        console.log('Waiting for jsQR library to load...');
+        await new Promise(resolve => {
+          const checkJsQR = setInterval(() => {
+            if (typeof jsQR !== 'undefined') {
+              clearInterval(checkJsQR);
+              console.log('jsQR library loaded');
+              resolve();
+            }
+          }, 100);
+
+          // Timeout after 5 seconds
+          setTimeout(() => {
+            clearInterval(checkJsQR);
+            console.error('jsQR library failed to load');
+            resolve();
+          }, 5000);
+        });
+      }
+
       await detectSupport();
       setStatus('Ready. Click Start and choose a tab/window with a QR code.');
+      console.log('App ready');
     })();
   </script>
 </body>
